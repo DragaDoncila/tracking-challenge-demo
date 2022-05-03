@@ -1,34 +1,59 @@
-import numpy as np
-from tracking_challenge_demo import ExampleQWidget, example_magic_widget
+import dask.array as da
+import pytest
+from napari.layers import Image, Labels
+from qtpy.QtCore import Qt
+
+from tracking_challenge_demo import (
+    SegmentationDiffHighlight,
+    Threshold,
+    segment_by_threshold,
+)
 
 
-# make_napari_viewer is a pytest fixture that returns a napari viewer object
-# capsys is a pytest fixture that captures stdout and stderr output streams
-def test_example_q_widget(make_napari_viewer, capsys):
-    # make viewer and add an image layer using our fixture
+@pytest.fixture
+def im_layer():
+    return Image(da.random.random((5, 100, 100)), name="im")
+
+
+@pytest.fixture
+def labels_layer():
+    return Labels(da.random.randint(0, 255, (5, 100, 100)), name="lab")
+
+
+def test_segment_widg_returns_layer(im_layer, labels_layer):
+    widg = segment_by_threshold()
+
+    retval = widg(im_layer, Threshold.triangle)
+    assert isinstance(retval[0], da.Array)
+    assert retval[1]["name"] == "im_seg"
+    assert retval[2] == "labels"
+
+
+def test_highlight_widg_populates_layers(
+    make_napari_viewer, labels_layer, im_layer
+):
     viewer = make_napari_viewer()
-    viewer.add_image(np.random.random((100, 100)))
+    widg = SegmentationDiffHighlight(viewer)
 
-    # create our widget, passing in the viewer
-    my_widget = ExampleQWidget(viewer)
+    assert widg.gt_layer_combo.count() == 0
+    assert widg.seg_layer_combo.count() == 0
 
-    # call our widget method
-    my_widget._on_click()
+    viewer.add_layer(labels_layer)
+    viewer.add_layer(im_layer)
+    assert widg.gt_layer_combo.count() == 1
+    assert widg.gt_layer_combo.currentText() == "lab"
+    assert widg.seg_layer_combo.count() == 1
+    assert widg.seg_layer_combo.currentText() == "lab"
 
-    # read captured output and check that it's as we expected
-    captured = capsys.readouterr()
-    assert captured.out == "napari has 1 layers\n"
 
-def test_example_magic_widget(make_napari_viewer, capsys):
+def test_highlight_widg_computes_difference(
+    make_napari_viewer, labels_layer, qtbot
+):
     viewer = make_napari_viewer()
-    layer = viewer.add_image(np.random.random((100, 100)))
+    widg = SegmentationDiffHighlight(viewer)
+    viewer.add_layer(labels_layer)
+    assert len(viewer.layers) == 1
 
-    # this time, our widget will be a MagicFactory or FunctionGui instance
-    my_widget = example_magic_widget()
+    qtbot.mouseClick(widg.highlight_btn, Qt.MouseButton.LeftButton)
 
-    # if we "call" this object, it'll execute our function
-    my_widget(viewer.layers[0])
-
-    # read captured output and check that it's as we expected
-    captured = capsys.readouterr()
-    assert captured.out == f"you have selected {layer}\n"
+    assert len(viewer.layers) == 2
