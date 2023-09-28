@@ -1,5 +1,6 @@
 name: tracking-challenge-demo
 display_name: Tracking Challenge Solver
+visibility: hidden
 contributions:
   commands:
     - id: tracking-challenge-demo.get_reader
